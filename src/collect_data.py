@@ -1,45 +1,54 @@
 import yfinance as yf
-import polars as pl
+import pandas as pd
 import datetime as dt
+import os
 
 class DataCollector:
     """
     Docstring for DataCollector
     """
 
-    def __init__(self, ticker: str | None = None):
-        self.ticker = ticker
+    def __init__(self, tickers: str | list):
+        self.tickers = tickers
 
     def fetch_data(self):
         """
-        Fetch historical market data for the given ticker symbol.
+        Fetch historical market data for the given tickers symbol.
 
         Returns:
-            polars.DataFrame: Historical market data.
+            pandas.DataFrame: Historical market data.
         """
-        ticker = self.ticker
-        if not ticker:
-            raise ValueError("Ticker symbol must be provided.")
-        data_atual = dt.date.today()
-        period = data_atual - dt.timedelta(days=30, seconds=0, microseconds=0)
-        data = yf.Ticker(ticker)
-        historical_data = data.history(period=period)
-        df = pl.DataFrame(historical_data)
+        tickers = self.tickers
+        
+        df_dict = {}
 
-        return df
+        if isinstance(tickers, list):
+            yf_instance = yf.Tickers(tickers=tickers)
+            for ticker in tickers: # fazer esse loop para cada ticker e gerar um df separado
+                data = yf_instance.history(period='3mo')
+                data['Ticker'] = ticker
+                df_dict[ticker] = data
+
     
-    def save_data(self, df: pl.DataFrame, filename:str):
+    def save_data(self, df: pd.DataFrame, filename:str):
         """
         Save the DataFrame to a CSV file.
 
         Args:
-            df (polars.DataFrame): The DataFrame to save.
+            df (pandas.DataFrame): The DataFrame to save.
             filename (str): The name of the file to save the data to.
         """
-        df.write_csv(filename)
+
+        tickers = self.tickers
+
+        for ticker in (tickers if isinstance(tickers, list) else [tickers]):
+            df = df.filter(df['Ticker'] == ticker)
+
+
+        df.to_csv(filename)
     
 if __name__ == '__main__':
-    collector = DataCollector(ticker='PETR4.SA')
+    collector = DataCollector(tickers="PETR4.SA")
     data = collector.fetch_data()
     filename = 'data/raw/data.csv'
     collector.save_data(data, filename)
