@@ -1,15 +1,19 @@
 import yfinance as yf
 import pandas as pd
-import datetime as dt
-import os
+import boto3
+from io import BytesIO
+from botocore.exceptions import ClientError
 
 class DataCollector:
     """
-    Docstring for DataCollector
+    Coletor de dados do yfinance e salvamento em parquet no S3 com partição por data
     """
 
-    def __init__(self, tickers: str | list):
-        self.tickers = tickers
+    def __init__(self, tickers: str | list, bucket_name: str, s3_prefix: str = 'raw-data/'):
+        self.tickers = tickers if isinstance(tickers, list) else [tickers]
+        self.bucket_name = bucket_name
+        self.s3_prefix = s3_prefix
+        self.s3_client = boto3.client('s3')
 
     def fetch_data(self):
         """
@@ -29,10 +33,14 @@ class DataCollector:
                 data['Ticker'] = ticker
                 df_dict[ticker] = data
 
+        df = pd.concat(df_dict.values()).reset_index()
+        df = pd.DataFrame(df)
+        return df #pd.concat(df_dict.values()).reset_index()
+
     
-    def save_data(self, df: pd.DataFrame, filename:str):
+    def save_data(self, df: pd.DataFrame, path:str):
         """
-        Save the DataFrame to a CSV file.
+        Save the DataFrame to a parquet file.
 
         Args:
             df (pandas.DataFrame): The DataFrame to save.
@@ -42,14 +50,14 @@ class DataCollector:
         tickers = self.tickers
 
         for ticker in (tickers if isinstance(tickers, list) else [tickers]):
-            df = df.filter(df['Ticker'] == ticker)
+            df = df[df['Ticker'] == ticker]
+            PATH = os.path.join(path, ticker, f"{ticker}_data.parquet")
 
+            df.to_parquet(PATH)
 
-        df.to_csv(filename)
-    
 if __name__ == '__main__':
-    collector = DataCollector(tickers="PETR4.SA")
+    collector = DataCollector(tickers=["PETR4.SA", "VALE3.SA"])
     data = collector.fetch_data()
-    filename = 'data/raw/data.csv'
-    collector.save_data(data, filename)
+    print(data.head())
+    collector.save_data(data, 'data/raw/')
     
