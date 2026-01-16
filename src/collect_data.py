@@ -1,5 +1,6 @@
 import yfinance as yf
 import pandas as pd
+import datetime as dt
 import boto3
 from io import BytesIO
 from botocore.exceptions import ClientError
@@ -17,47 +18,76 @@ class DataCollector:
 
     def fetch_data(self):
         """
-        Fetch historical market data for the given tickers symbol.
+        Coleta dos dados a partir do ticker.
 
         Returns:
-            pandas.DataFrame: Historical market data.
+            pandas.DataFrame: Dados do mercado de ações.
         """
-        tickers = self.tickers
-        
         df_dict = {}
-
-        if isinstance(tickers, list):
-            yf_instance = yf.Tickers(tickers=tickers)
-            for ticker in tickers: # fazer esse loop para cada ticker e gerar um df separado
-                data = yf_instance.history(period='3mo')
+            
+        yf_instance = yf.Tickers(tickers=self.tickers)
+        
+        for ticker in self.tickers:
+            try:
+                data = yf_instance.history(period='1d')
                 data['Ticker'] = ticker
                 df_dict[ticker] = data
+                print(f'Dados coletados para: {ticker} (Registros: {len(data)})')
+            except Exception as e:
+                print(f'Erro ao coletar dados para {ticker}: {e}')
 
+        if not df_dict:
+            print("Nenhum dado foi coletado.")
+        
         df = pd.concat(df_dict.values()).reset_index()
-        df = pd.DataFrame(df)
-        return df #pd.concat(df_dict.values()).reset_index()
+        return df
 
     
-    def save_data(self, df: pd.DataFrame, path:str):
+    def save_to_s3(self, df: pd.DataFrame):
         """
-        Save the DataFrame to a parquet file.
+        Salvar os dataframes em arquivos .parquet no S3.
 
         Args:
             df (pandas.DataFrame): The DataFrame to save.
-            filename (str): The name of the file to save the data to.
         """
 
-        tickers = self.tickers
+        data_atual = dt.datetime.now().strftime('%Y-%m-%d')
 
-        for ticker in (tickers if isinstance(tickers, list) else [tickers]):
-            df = df[df['Ticker'] == ticker]
-            PATH = os.path.join(path, ticker, f"{ticker}_data.parquet")
+        for ticker in self.tickers:
+            df_ticker = df[df['Ticker'] == ticker]
+            if df_ticker.empty:
+                print(f'Nenhum dado para salvar para: {ticker}')
+                continue
 
-            df.to_parquet(PATH)
+            buffer = BytesIO()
+            df_ticker.to_parquet(buffer, index=False)
+            buffer.seek(0)
+
+            s3_key = f"{self.s3_prefix}date={data_atual}/{ticker}/{ticker}.parquet"
+
+            try:
+                self.s3_client.upload_fileobj(buffer, self.bucket_name, s3_key)
+                print(f'Arquivo salvo no S3: s3://{self.bucket_name}/{s3_key}')
+            except ClientError as e:
+                print(f'Erro ao salvar arquivo no S3 para {ticker}: {e}')
+        
+    def run(self):
+        """
+        Executa o pipeline completo: coleta e salva
+        """
+        print(f"🚀 Iniciando coleta para: {self.tickers}")
+        print(f"📦 Bucket: {self.bucket_name}")
+        
+        df = self.fetch_data()
+        self.save_to_s3(df)
+        
+        print("✅ Pipeline concluído!")
 
 if __name__ == '__main__':
-    collector = DataCollector(tickers=["PETR4.SA", "VALE3.SA"])
-    data = collector.fetch_data()
-    print(data.head())
-    collector.save_data(data, 'data/raw/')
+    BUCKET_NAME = 'mlet-financial-data-matheus'
+    TICKERS = ['HGLG11.SA', 'PETR4.SA']
+
+    collector = DataCollector(tickers=TICKERS, bucket_name=BUCKET_NAME, s3_prefix='raw-data/')
+
+    collector.run()
     
