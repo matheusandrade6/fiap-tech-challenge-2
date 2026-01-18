@@ -75,14 +75,10 @@ class DataCollector:
         """
         Executa o pipeline completo: coleta e salva
         """
-        print(f"🚀 Iniciando coleta para: {self.tickers}")
-        print(f"📦 Bucket: {self.bucket_name}")
-        
+
         df = self.fetch_data()
         self.save_to_s3(df)
         
-        print("✅ Pipeline concluído!")
-
 if __name__ == '__main__':
     BUCKET_NAME = 'mlet-financial-data-matheus'
     TICKERS = ['HGLG11.SA', 'PETR4.SA']
