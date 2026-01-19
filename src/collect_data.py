@@ -4,14 +4,13 @@ import datetime as dt
 import boto3
 from io import BytesIO
 from botocore.exceptions import ClientError
-from config import S3_PREFIX
 
 class DataCollector:
     """
     Coletor de dados do yfinance e salvamento em parquet no S3 com partição por df
     """
 
-    def __init__(self, tickers: str | list, bucket_name: str, s3_prefix: str = S3_PREFIX):
+    def __init__(self, tickers: str | list, bucket_name: str, s3_prefix: str):
         self.tickers = tickers if isinstance(tickers, list) else [tickers]
         self.bucket_name = bucket_name
         self.s3_prefix = s3_prefix
@@ -32,6 +31,7 @@ class DataCollector:
             return df
         except Exception as e:
             print(f'Erro ao coletar dados para {self.tickers}: {e}')
+            return pd.DataFrame()
 
             
     def save_to_s3(self, df: pd.DataFrame, ticker: str):
@@ -43,7 +43,8 @@ class DataCollector:
         """
 
         if df.empty:
-            return print(f'Nenhum dado para salvar para: f{ticker}')
+            return print(f'Nenhum dado para salvar para: {ticker}')
+        pass
             
         buffer = BytesIO()
         df.reset_index(inplace=True)
@@ -73,13 +74,10 @@ class DataCollector:
         
 if __name__ == '__main__':
     BUCKET_NAME = 'mlet-financial-df-matheus'
-#    TICKERS = ['HGLG11.SA', 'PETR4.SA']
-#
-#   collector = DataCollector(tickers=TICKERS, bucket_name=BUCKET_NAME, s3_prefix=S3_PREFIX)
-#   collector.run()
     TICKERS = ['HGLG11.SA', 'PETR4.SA']
+    S3_PREFIX = 'raw/'
 
     collector = DataCollector(tickers=TICKERS, bucket_name=BUCKET_NAME, s3_prefix=S3_PREFIX)
-    print(collector.fetch_data())
-
+    df = collector.fetch_data(ticker='HGLG11.SA')
+    print(df.head())
     

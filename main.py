@@ -1,11 +1,10 @@
-import yfinance as yf
-import polars as pl
-import pandas as pd
+from src.collect_data import DataCollector
+from src.config import S3_PREFIX, TICKERS, BUCKET_NAME
 
-ticker = yf.Ticker("PETR4.SA")
-data = yf.download(["PETR4.SA", "HGLG11.SA"], period="5d")  # últimos 5 dias
-df = pd.DataFrame(data)
+collector = DataCollector(
+    tickers=TICKERS,
+    bucket_name=BUCKET_NAME,
+    s3_prefix=S3_PREFIX
+)
 
-print(data)
-print(df.head())
-
+collector.run()
