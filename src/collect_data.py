@@ -4,13 +4,14 @@ import datetime as dt
 import boto3
 from io import BytesIO
 from botocore.exceptions import ClientError
+from config import S3_PREFIX
 
 class DataCollector:
     """
-    Coletor de dados do yfinance e salvamento em parquet no S3 com partição por data
+    Coletor de dados do yfinance e salvamento em parquet no S3 com partição por df
     """
 
-    def __init__(self, tickers: str | list, bucket_name: str, s3_prefix: str = 'raw-data/'):
+    def __init__(self, tickers: str | list, bucket_name: str, s3_prefix: str = S3_PREFIX):
         self.tickers = tickers if isinstance(tickers, list) else [tickers]
         self.bucket_name = bucket_name
         self.s3_prefix = s3_prefix
@@ -23,24 +24,20 @@ class DataCollector:
         Returns:
             pandas.DataFrame: Dados do mercado de ações.
         """
-        df_dict = {}
-            
-        yf_instance = yf.Tickers(tickers=self.tickers)
-        
-        for ticker in self.tickers:
-            try:
-                data = yf_instance.history(period='1d')
-                data['Ticker'] = ticker
-                df_dict[ticker] = data
-                print(f'Dados coletados para: {ticker} (Registros: {len(data)})')
-            except Exception as e:
-                print(f'Erro ao coletar dados para {ticker}: {e}')
+        try:
+            yf_instance = yf.Tickers(tickers=self.tickers)
+            df = yf_instance.history(period='1d')
+            print(f'Dados coletados para: {self.tickers} (Registros: {len(df)})')
+            print("=== ESTRUTURA DO DATAFRAME ===")
+            print(f"Shape: {df.shape}")
+            print(f"\nIndex: {df.index}")
+            print(f"Index name: {df.index.name}")
+            print(f"\nColunas: {df.columns}")
+            print(f"Columns são MultiIndex? {isinstance(df.columns, pd.MultiIndex)}")
+        except Exception as e:
+            print(f'Erro ao coletar dados para {self.tickers}: {e}')
 
-        if not df_dict:
-            print("Nenhum dado foi coletado.")
-        
-        df = pd.concat(df_dict.values()).reset_index()
-        return df
+        return df.head()
 
     
     def save_to_s3(self, df: pd.DataFrame):
@@ -50,8 +47,6 @@ class DataCollector:
         Args:
             df (pandas.DataFrame): The DataFrame to save.
         """
-
-        data_atual = dt.datetime.now().strftime('%Y-%m-%d')
 
         for ticker in self.tickers:
             df_ticker = df[df['Ticker'] == ticker]
@@ -63,7 +58,13 @@ class DataCollector:
             df_ticker.to_parquet(buffer, index=False)
             buffer.seek(0)
 
-            s3_key = f"{self.s3_prefix}date={data_atual}/{ticker}/{ticker}.parquet"
+            df_ticker = pd.to_datetime(df_ticker['Date'])
+            date = df.iloc[0]['Date']
+            year = date.dt.year
+            month = date.dt.month
+            day = date.dt.day
+
+            s3_key = f"{self.s3_prefix}year={year}/month={month}/day={day}/{ticker}/{ticker}.parquet"
 
             try:
                 self.s3_client.upload_fileobj(buffer, self.bucket_name, s3_key)
@@ -80,10 +81,14 @@ class DataCollector:
         self.save_to_s3(df)
         
 if __name__ == '__main__':
-    BUCKET_NAME = 'mlet-financial-data-matheus'
+    BUCKET_NAME = 'mlet-financial-df-matheus'
+#    TICKERS = ['HGLG11.SA', 'PETR4.SA']
+#
+#   collector = DataCollector(tickers=TICKERS, bucket_name=BUCKET_NAME, s3_prefix=S3_PREFIX)
+#   collector.run()
     TICKERS = ['HGLG11.SA', 'PETR4.SA']
 
-    collector = DataCollector(tickers=TICKERS, bucket_name=BUCKET_NAME, s3_prefix='raw-data/')
+    collector = DataCollector(tickers=TICKERS, bucket_name=BUCKET_NAME, s3_prefix=S3_PREFIX)
+    print(collector.fetch_data())
 
-    collector.run()
     
