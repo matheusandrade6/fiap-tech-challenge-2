@@ -17,7 +17,7 @@ class DataCollector:
         self.s3_prefix = s3_prefix
         self.s3_client = boto3.client('s3')
 
-    def fetch_data(self):
+    def fetch_data(self, ticker: str) -> pd.DataFrame:
         """
         Coleta dos dados a partir do ticker.
 
@@ -25,22 +25,16 @@ class DataCollector:
             pandas.DataFrame: Dados do mercado de ações.
         """
         try:
-            yf_instance = yf.Tickers(tickers=self.tickers)
+            yf_instance = yf.Ticker(ticker=ticker)
             df = yf_instance.history(period='1d')
-            print(f'Dados coletados para: {self.tickers} (Registros: {len(df)})')
-            print("=== ESTRUTURA DO DATAFRAME ===")
-            print(f"Shape: {df.shape}")
-            print(f"\nIndex: {df.index}")
-            print(f"Index name: {df.index.name}")
-            print(f"\nColunas: {df.columns}")
-            print(f"Columns são MultiIndex? {isinstance(df.columns, pd.MultiIndex)}")
+            df['Ticker'] = ticker
+            print(f'Dados coletados para: {ticker} (Registros: {len(df)})')
+            return df
         except Exception as e:
             print(f'Erro ao coletar dados para {self.tickers}: {e}')
 
-        return df.head()
-
-    
-    def save_to_s3(self, df: pd.DataFrame):
+            
+    def save_to_s3(self, df: pd.DataFrame, ticker: str):
         """
         Salvar os dataframes em arquivos .parquet no S3.
 
@@ -48,37 +42,34 @@ class DataCollector:
             df (pandas.DataFrame): The DataFrame to save.
         """
 
-        for ticker in self.tickers:
-            df_ticker = df[df['Ticker'] == ticker]
-            if df_ticker.empty:
-                print(f'Nenhum dado para salvar para: {ticker}')
-                continue
+        if df.empty:
+            return print(f'Nenhum dado para salvar para: f{ticker}')
+            
+        buffer = BytesIO()
+        df.reset_index(inplace=True)
+        df.to_parquet(buffer, index=False)
+        buffer.seek(0)
 
-            buffer = BytesIO()
-            df_ticker.to_parquet(buffer, index=False)
-            buffer.seek(0)
+        date = df['Date'].iloc[0]
+        year = date.year
+        month = date.month
+        day = date.day
 
-            df_ticker = pd.to_datetime(df_ticker['Date'])
-            date = df.iloc[0]['Date']
-            year = date.dt.year
-            month = date.dt.month
-            day = date.dt.day
+        s3_key = f"{self.s3_prefix}ticker={ticker}/year={year}/month={month}/day={day}/{ticker}.parquet"
 
-            s3_key = f"{self.s3_prefix}year={year}/month={month}/day={day}/{ticker}/{ticker}.parquet"
-
-            try:
-                self.s3_client.upload_fileobj(buffer, self.bucket_name, s3_key)
-                print(f'Arquivo salvo no S3: s3://{self.bucket_name}/{s3_key}')
-            except ClientError as e:
-                print(f'Erro ao salvar arquivo no S3 para {ticker}: {e}')
+        try:
+            self.s3_client.upload_fileobj(buffer, self.bucket_name, s3_key)
+            print(f'Arquivo salvo no S3: s3://{self.bucket_name}/{s3_key}')
+        except ClientError as e:
+            print(f'Erro ao salvar arquivo no S3 para {ticker}: {e}')
         
     def run(self):
         """
         Executa o pipeline completo: coleta e salva
         """
-
-        df = self.fetch_data()
-        self.save_to_s3(df)
+        for ticker in self.tickers:
+            df = self.fetch_data(ticker)
+            self.save_to_s3(df=df, ticker=ticker)
         
 if __name__ == '__main__':
     BUCKET_NAME = 'mlet-financial-df-matheus'
