@@ -51,6 +51,7 @@ class DataCollector:
             
         buffer = BytesIO()
         df.reset_index(inplace=True)
+        df['Date'] = pd.to_datetime(df['Date']).dt.date
         df.to_parquet(buffer, index=False)
         buffer.seek(0)
 
