@@ -29,7 +29,6 @@ class DataCollector:
         try:
             yf_instance = yf.Ticker(ticker=ticker)
             df = yf_instance.history(period='1d')
-            df['Ticker'] = ticker
             print(f'Dados coletados para: {ticker} (Registros: {len(df)})')
             return df
         except Exception as e:
@@ -84,4 +83,5 @@ if __name__ == '__main__':
     collector = DataCollector(tickers=TICKERS, bucket_name=BUCKET_NAME, s3_prefix=S3_PREFIX)
     df = collector.fetch_data(ticker='HGLG11.SA')
     print(df.head())
+    print(df.dtypes)
     
