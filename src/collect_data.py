@@ -83,5 +83,5 @@ if __name__ == '__main__':
     collector = DataCollector(tickers=TICKERS, bucket_name=BUCKET_NAME, s3_prefix=S3_PREFIX)
     df = collector.fetch_data(ticker='HGLG11.SA')
     print(df.head())
-    print(df.dtypes)
+    print(df.columns.tolist())
     
