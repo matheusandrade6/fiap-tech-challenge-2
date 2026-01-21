@@ -79,14 +79,3 @@ class DataCollector:
         for ticker in self.tickers:
             df = self.fetch_data(ticker, period='30d')
             self.save_to_s3(df=df, ticker=ticker)
-        
-if __name__ == '__main__':
-    BUCKET_NAME = 'mlet-financial-df-matheus'
-    TICKERS = ['HGLG11.SA', 'PETR4.SA']
-    S3_PREFIX = 'raw/'
-
-    collector = DataCollector(tickers=TICKERS, bucket_name=BUCKET_NAME, s3_prefix=S3_PREFIX)
-    df = collector.fetch_data(ticker='HGLG11.SA')
-    print(df.head())
-    print(df.columns.tolist())
-    
